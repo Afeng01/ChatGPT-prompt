@@ -10,7 +10,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///prompts.db'
+
+# 数据库配置
+if os.environ.get('VERCEL_ENV') == 'production':
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tmp/prompts.db'
+else:
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///prompts.db'
+
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default-secret-key')
 
 # 从环境变量获取管理员IP地址列表
@@ -40,9 +46,7 @@ class Prompt(db.Model):
 def init_db():
     """初始化数据库"""
     with app.app_context():
-        # 创建新的数据库表（如果不存在）
         db.create_all()
-        
         # 如果数据库是空的，添加示例数据
         if not Prompt.query.first():
             sample_prompts = [
