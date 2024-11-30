@@ -69,7 +69,7 @@
                             </div>
                             <p class="mt-3">{{ prompt.content }}</p>
                             <div class="prompt-meta">
-                                创建于: {{ prompt.format_created_at() }}
+                                创建于: {{ prompt.created_at|format_datetime }}
                                 {% if is_admin %}
                                 <span class="creator-ip">创建者IP: {{ prompt.creator_ip }}</span>
                                 {% endif %}
@@ -79,7 +79,7 @@
                             <button class="action-btn copy-btn" data-content="{{ prompt.content }}">
                                 <span class="icon">📋</span>复制
                             </button>
-                            {% if prompt.can_edit(current_ip) %}
+                            {% if prompt.creator_ip == current_ip or is_admin %}
                             <a href="{{ url_for('edit_prompt', id=prompt.id) }}" class="action-btn edit-btn">
                                 <span class="icon">✏️</span>编辑
                             </a>
