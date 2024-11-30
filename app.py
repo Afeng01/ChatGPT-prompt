@@ -11,9 +11,15 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# 数据库配置
+# 禁用 SQLAlchemy 的文件系统访问
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'connect_args': {'check_same_thread': False}
+}
+
+# 在 Vercel 环境中使用内存数据库
 if os.environ.get('VERCEL_ENV') == 'production':
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tmp/prompts.db'
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
 else:
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///prompts.db'
 
@@ -43,25 +49,21 @@ class Prompt(db.Model):
         """检查是否有权限编辑"""
         return ip in ADMIN_IPS or ip == self.creator_ip
 
-def init_db():
-    """初始化数据库"""
-    with app.app_context():
-        db.create_all()
-        # 如果数据库是空的，添加示例数据
-        if not Prompt.query.first():
-            sample_prompts = [
-                Prompt(
-                    title="示例Prompt",
-                    content="这是一个示例Prompt，用于测试显示效果。",
-                    category="示例,测试",
-                    creator_ip="127.0.0.1"
-                )
-            ]
-            db.session.add_all(sample_prompts)
-            db.session.commit()
-
 # 初始化数据库
-init_db()
+with app.app_context():
+    db.create_all()
+    # 如果数据库是空的，添加示例数据
+    if not Prompt.query.first():
+        sample_prompts = [
+            Prompt(
+                title="示例Prompt",
+                content="这是一个示例Prompt，用于测试显示效果。",
+                category="示例,测试",
+                creator_ip="127.0.0.1"
+            )
+        ]
+        db.session.add_all(sample_prompts)
+        db.session.commit()
 
 def get_client_ip():
     """获取客户端IP地址"""
