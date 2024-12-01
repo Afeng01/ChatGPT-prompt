@@ -8,6 +8,7 @@ import certifi
 from dotenv import load_dotenv
 from bson import ObjectId
 import pymongo
+from pymongo import MongoClient
 
 # 配置日志 - 设置更详细的日志级别
 logging.basicConfig(
