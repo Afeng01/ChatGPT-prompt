@@ -9,10 +9,11 @@
     "routes": [
         {
             "src": "/(.*)",
-            "dest": "/vercel_handler.py"
+            "dest": "vercel_handler.py"
         }
     ],
     "env": {
-        "PYTHONPATH": "."
+        "PYTHONPATH": ".",
+        "FLASK_ENV": "production"
     }
 } 
