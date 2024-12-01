@@ -3,116 +3,186 @@ from flask_pymongo import PyMongo
 from datetime import datetime
 import pytz
 import os
+import logging
+import certifi
 from dotenv import load_dotenv
 from bson import ObjectId
+import pymongo
+
+# 配置日志 - 设置更详细的日志级别
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # 加载环境变量
 load_dotenv()
 
 app = Flask(__name__)
+app.debug = True  # 启用调试模式
 
-# MongoDB配置
-app.config["MONGO_URI"] = os.getenv("MONGODB_URI", "mongodb://localhost:27017/promptdb")
-mongo = PyMongo(app)
+# MongoDB Atlas 配置
+try:
+    mongodb_uri = os.getenv("MONGODB_URI")
+    logger.debug(f"MongoDB URI: {mongodb_uri.replace(mongodb_uri.split('@')[0], '***')}")  # 隐藏敏感信息
+    
+    if not mongodb_uri:
+        raise ValueError("未找到 MONGODB_URI 环境变量")
+    
+    # 直接使用 pymongo
+    client = pymongo.MongoClient(
+        mongodb_uri,
+        serverSelectionTimeoutMS=5000,
+        connectTimeoutMS=5000,
+        socketTimeoutMS=5000,
+        tlsCAFile=certifi.where()
+    )
+    
+    # 获取数据库
+    db = client.get_default_database()
+    
+    # 测试连接
+    client.admin.command('ping')
+    logger.info("MongoDB Atlas 连接成功！")
+    
+    # 列出所有集合
+    collections = db.list_collection_names()
+    logger.info(f"可用的集合: {collections}")
+    
+except Exception as e:
+    logger.error(f"MongoDB Atlas 连接错误: {str(e)}", exc_info=True)
+    raise
 
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default-secret-key')
 
 # 从环境变量获取管理员IP地址列表
 ADMIN_IPS = set(os.getenv('ADMIN_IPS', '127.0.0.1').split(','))
+logger.info(f"管理员IP列表: {ADMIN_IPS}")
 
 def get_client_ip():
     """获取客户端IP地址"""
     if request.headers.getlist("X-Forwarded-For"):
-        return request.headers.getlist("X-Forwarded-For")[0]
-    return request.remote_addr
+        ip = request.headers.getlist("X-Forwarded-For")[0]
+    else:
+        ip = request.remote_addr
+    logger.debug(f"客户端IP: {ip}")
+    return ip
 
 def can_edit(prompt, ip):
     """检查是否有权限编辑"""
-    return ip in ADMIN_IPS or ip == prompt.get('creator_ip')
+    has_permission = ip in ADMIN_IPS or ip == prompt.get('creator_ip')
+    logger.debug(f"权限检查 - IP: {ip}, 是否有权限: {has_permission}")
+    return has_permission
 
 @app.route('/')
 def index():
-    prompts = list(mongo.db.prompts.find())
-    categorized_prompts = {}
-    current_ip = get_client_ip()
-    
-    for prompt in prompts:
-        prompt['id'] = str(prompt['_id'])  # 转换ObjectId为字符串
-        categories = [cat.strip() for cat in prompt.get('category', '').replace('，', ',').split(',') if cat.strip()]
-        for category in categories:
-            if category not in categorized_prompts:
-                categorized_prompts[category] = []
-            categorized_prompts[category].append(prompt)
-    
-    sorted_categories = sorted(categorized_prompts.keys())
-    is_admin = current_ip in ADMIN_IPS
-    
-    return render_template('index.html', 
-                         categorized_prompts=categorized_prompts, 
-                         categories=sorted_categories,
-                         current_ip=current_ip,
-                         is_admin=is_admin)
+    try:
+        logger.debug("访问首页")
+        prompts = list(db.prompts.find())
+        categorized_prompts = {}
+        current_ip = get_client_ip()
+        
+        for prompt in prompts:
+            prompt['id'] = str(prompt['_id'])
+            categories = [cat.strip() for cat in prompt.get('category', '').replace('，', ',').split(',') if cat.strip()]
+            for category in categories:
+                if category not in categorized_prompts:
+                    categorized_prompts[category] = []
+                categorized_prompts[category].append(prompt)
+        
+        sorted_categories = sorted(categorized_prompts.keys())
+        is_admin = current_ip in ADMIN_IPS
+        
+        logger.debug(f"首页加载成功 - 分类数: {len(sorted_categories)}, 是否管理员: {is_admin}")
+        return render_template('index.html', 
+                             categorized_prompts=categorized_prompts, 
+                             categories=sorted_categories,
+                             current_ip=current_ip,
+                             is_admin=is_admin)
+    except Exception as e:
+        logger.error(f"首页加载错误: {e}")
+        return render_template('error.html', error=str(e)), 500
 
 @app.route('/add', methods=['GET', 'POST'])
 def add_prompt():
-    if request.method == 'POST':
-        title = request.form.get('title')
-        content = request.form.get('content')
-        category = request.form.get('category')
-        creator_ip = get_client_ip()
+    try:
+        if request.method == 'POST':
+            title = request.form.get('title')
+            content = request.form.get('content')
+            category = request.form.get('category')
+            creator_ip = get_client_ip()
+            
+            new_prompt = {
+                'title': title,
+                'content': content,
+                'category': category,
+                'creator_ip': creator_ip,
+                'created_at': datetime.now(pytz.timezone('Asia/Shanghai'))
+            }
+            
+            db.prompts.insert_one(new_prompt)
+            logger.info(f"新Prompt添加成功 - 标题: {title}")
+            return redirect(url_for('index'))
         
-        new_prompt = {
-            'title': title,
-            'content': content,
-            'category': category,
-            'creator_ip': creator_ip,
-            'created_at': datetime.now(pytz.timezone('Asia/Shanghai'))
-        }
-        
-        mongo.db.prompts.insert_one(new_prompt)
-        return redirect(url_for('index'))
-    
-    return render_template('add.html')
+        return render_template('add.html')
+    except Exception as e:
+        logger.error(f"添加Prompt错误: {e}")
+        return render_template('error.html', error=str(e)), 500
 
 @app.route('/edit/<string:id>', methods=['GET', 'POST'])
 def edit_prompt(id):
-    prompt = mongo.db.prompts.find_one({'_id': ObjectId(id)})
-    if not prompt:
-        flash('Prompt不存在')
-        return redirect(url_for('index'))
-    
-    current_ip = get_client_ip()
-    if not can_edit(prompt, current_ip):
-        flash('您没有权限编辑此内容')
-        return redirect(url_for('index'))
-    
-    if request.method == 'POST':
-        mongo.db.prompts.update_one(
-            {'_id': ObjectId(id)},
-            {'$set': {
-                'title': request.form.get('title'),
-                'content': request.form.get('content'),
-                'category': request.form.get('category')
-            }}
-        )
-        return redirect(url_for('index'))
-    
-    return render_template('edit.html', prompt=prompt)
+    try:
+        prompt = db.prompts.find_one({'_id': ObjectId(id)})
+        if not prompt:
+            logger.warning(f"Prompt不存在 - ID: {id}")
+            flash('Prompt不存在')
+            return redirect(url_for('index'))
+        
+        current_ip = get_client_ip()
+        if not can_edit(prompt, current_ip):
+            logger.warning(f"编辑权限被拒绝 - IP: {current_ip}, Prompt ID: {id}")
+            flash('您没有权限编辑此内容')
+            return redirect(url_for('index'))
+        
+        if request.method == 'POST':
+            db.prompts.update_one(
+                {'_id': ObjectId(id)},
+                {'$set': {
+                    'title': request.form.get('title'),
+                    'content': request.form.get('content'),
+                    'category': request.form.get('category')
+                }}
+            )
+            logger.info(f"Prompt更新成功 - ID: {id}")
+            return redirect(url_for('index'))
+        
+        return render_template('edit.html', prompt=prompt)
+    except Exception as e:
+        logger.error(f"编辑Prompt错误: {e}")
+        return render_template('error.html', error=str(e)), 500
 
 @app.route('/delete/<string:id>', methods=['POST'])
 def delete_prompt(id):
-    prompt = mongo.db.prompts.find_one({'_id': ObjectId(id)})
-    if not prompt:
-        flash('Prompt不存在')
+    try:
+        prompt = db.prompts.find_one({'_id': ObjectId(id)})
+        if not prompt:
+            logger.warning(f"Prompt不存在 - ID: {id}")
+            flash('Prompt不存在')
+            return redirect(url_for('index'))
+        
+        current_ip = get_client_ip()
+        if not can_edit(prompt, current_ip):
+            logger.warning(f"删除权限被拒绝 - IP: {current_ip}, Prompt ID: {id}")
+            flash('您没有权限删除此内容')
+            return redirect(url_for('index'))
+        
+        db.prompts.delete_one({'_id': ObjectId(id)})
+        logger.info(f"Prompt删除成功 - ID: {id}")
         return redirect(url_for('index'))
-    
-    current_ip = get_client_ip()
-    if not can_edit(prompt, current_ip):
-        flash('您没有权限删除此内容')
-        return redirect(url_for('index'))
-    
-    mongo.db.prompts.delete_one({'_id': ObjectId(id)})
-    return redirect(url_for('index'))
+    except Exception as e:
+        logger.error(f"删除Prompt错误: {e}")
+        return render_template('error.html', error=str(e)), 500
 
 # 添加日期格式化过滤器
 @app.template_filter('format_datetime')
@@ -121,6 +191,17 @@ def format_datetime(value):
     if isinstance(value, datetime):
         return value.strftime('%Y-%m-%d %H:%M')
     return value
+
+# 错误处理
+@app.errorhandler(500)
+def internal_error(error):
+    logger.error(f'Server Error: {error}')
+    return render_template('error.html', error=error), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    logger.error(f'Unhandled Exception: {e}')
+    return render_template('error.html', error=e), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True) 
