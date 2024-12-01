@@ -203,12 +203,5 @@ def handle_exception(e):
     logger.error(f'Unhandled Exception: {e}')
     return render_template('error.html', error=e), 500
 
-def handle_request(event, context):
-    """Handle request for Vercel Serverless"""
-    from werkzeug.middleware.proxy_fix import ProxyFix
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
-    
-    return app.wsgi_app
-
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000) 
+    app.run(host='0.0.0.0', port=5000, debug=True) 
