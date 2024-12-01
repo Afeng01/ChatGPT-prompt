@@ -23,36 +23,20 @@ load_dotenv()
 app = Flask(__name__)
 app.debug = True  # 启用调试模式
 
-# MongoDB Atlas 配置
+# MongoDB配置
+mongo_uri = os.getenv('MONGODB_URI')
+app.logger.debug(f"MongoDB URI: {mongo_uri.replace(os.getenv('MONGODB_PASSWORD', ''), '***')}")
+
 try:
-    mongodb_uri = os.getenv("MONGODB_URI")
-    logger.debug(f"MongoDB URI: {mongodb_uri.replace(mongodb_uri.split('@')[0], '***')}")  # 隐藏敏感信息
+    # 直接连接到指定的数据库
+    client = MongoClient(mongo_uri)
+    db = client.promptdb  # 直接使用数据库名称
     
-    if not mongodb_uri:
-        raise ValueError("未找到 MONGODB_URI 环境变量")
-    
-    # 直接使用 pymongo
-    client = pymongo.MongoClient(
-        mongodb_uri,
-        serverSelectionTimeoutMS=5000,
-        connectTimeoutMS=5000,
-        socketTimeoutMS=5000,
-        tlsCAFile=certifi.where()
-    )
-    
-    # 获取数据库
-    db = client.get_default_database()
-    
-    # 测试连接
-    client.admin.command('ping')
-    logger.info("MongoDB Atlas 连接成功！")
-    
-    # 列出所有集合
-    collections = db.list_collection_names()
-    logger.info(f"可用的集合: {collections}")
+    # 确保索引存在
+    db.prompts.create_index([('title', 'text'), ('content', 'text'), ('category', 'text')])
     
 except Exception as e:
-    logger.error(f"MongoDB Atlas 连接错误: {str(e)}", exc_info=True)
+    app.logger.error(f"MongoDB Atlas 连接错误: {str(e)}", exc_info=True)
     raise
 
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default-secret-key')
@@ -155,7 +139,7 @@ def edit_prompt(id):
                     'category': request.form.get('category')
                 }}
             )
-            logger.info(f"Prompt更新成功 - ID: {id}")
+            logger.info(f"Prompt更新成��� - ID: {id}")
             return redirect(url_for('index'))
         
         return render_template('edit.html', prompt=prompt)
