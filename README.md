@@ -1,47 +1,45 @@
 # ChatGPT Prompts 库
 
-一个用于存储和分享ChatGPT Prompts的网站。
+一个简单的 ChatGPT Prompts 展示网站，收集和分享高质量的 Prompts。
 
-## 功能特点
+## 特点
 
-- 按分类组织Prompts
-- 支持多分类标签
-- 一键复制Prompt内容
-- 用户权限管理
-- 响应式设计
+- 纯静态网站，无需后端服务器
+- 按分类展示 Prompts
+- 支持一键复制 Prompt
+- 响应式设计，支持移动端
+
+## 如何更新内容
+
+1. 修改 `static/data/prompts.json` 文件
+2. 按照以下格式添加新的 Prompt：
+
+```json
+{
+  "id": "唯一ID",
+  "title": "Prompt标题",
+  "content": "Prompt内容",
+  "category": "分类1,分类2",
+  "created_at": "创建日期"
+}
+```
+
+## 部署
+
+1. Fork 这个仓库
+2. 在仓库设置中启用 GitHub Pages
+3. 选择 main 分支作为源
+4. 等待几分钟后访问 your-username.github.io/repository-name
 
 ## 本地开发
 
-1. 克隆仓库：
+由于使用了 fetch API，需要通过 HTTP 服务器访问文件。可以使用以下方法之一：
+
+1. Python 简单服务器：
 ```bash
-git clone [你的仓库URL]
-cd [仓库名称]
+python -m http.server 8000
 ```
 
-2. 安装依赖：
-```bash
-pip install -r requirements.txt
-```
+2. VS Code Live Server 插件
 
-3. 配置环境变量：
-- 复制 `.env.example` 为 `.env`
-- 修改 `.env` 中的配置
-
-4. 运行应用：
-```bash
-python app.py
-```
-
-## 部署说明
-
-本项目使用Vercel部署。部署时需要设置以下环境变量：
-
-- `SECRET_KEY`: 用于会话安全
-- `ADMIN_IPS`: 管理员IP地址列表（逗号分隔）
-
-## 技术栈
-
-- Flask
-- SQLite
-- Bootstrap 5
-- Python 3.x 
+然后访问 `http://localhost:8000` 即可。
